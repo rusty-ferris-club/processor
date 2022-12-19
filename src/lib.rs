@@ -1,5 +1,8 @@
 mod structs;
 
+pub use structs::traits::Combiner;
+pub use structs::traits::find_line_start;
+
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

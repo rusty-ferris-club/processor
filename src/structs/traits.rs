@@ -1,27 +1,26 @@
-pub trait Combiner {
+pub trait Combiner<Data> {
     fn size(&self) -> u64;
-    fn set_start_marker(&mut self, start: u8);
-    fn get_start_marker(&self) -> u8;
-    fn set_end_marker(&mut self, end: u8);
-    fn get_end_marker(&self) -> u8;
+    fn set_start_marker(&mut self, start: Data);
+    fn get_start_marker(&self) -> Data;
+    fn set_end_marker(&mut self, end: Data);
+    fn get_end_marker(&self) -> Data;
     fn get_current_position(&mut self) -> u64;
     fn set_current_position(&mut self, current_position: u64);
     fn read_line(&mut self) -> String;
-    /// Reads from current_position to current_position + size
-    /// and updates the current_position to current_position + size
-    fn read_exact(&mut self, size: i64, buf: &mut [u8]);
-    fn calculate_chunks(&mut self, cpus: u64) -> Vec<[u64; 2]>;
+    fn read_one(&mut self, forward: bool) -> Option<Data>;
+    // fn calculate_chunks(&mut self, cpus: u64) -> Vec<[u64; 2]>;
 }
 
-pub fn find_line_start<T>(data: &mut T, start_offset: u64) -> u64
+pub fn find_line_start<Source, Data>(data: &mut Source, start_offset: u64) -> u64
 where
-    T: Combiner,
+    Source: Combiner<Data>,
+    Data: PartialEq,
 {
-    let mut buf: &mut [u8] = &mut [0];
+    let mut buf: Option<Data> = None;
     data.set_current_position(start_offset);
     while data.get_current_position() > 0 {
-        data.read_exact(-1, buf);
-        if buf[0] == data.get_start_marker() {
+        buf = data.read_one(false);
+        if buf.unwrap() == data.get_start_marker() {
             break;
         }
         if data.get_current_position() == 0 {
@@ -34,9 +33,9 @@ where
     data.get_current_position()
 }
 
-pub fn calculate_chunks<T>(data: &mut T, cpus: u64) -> Vec<[u64; 2]>
+pub fn calculate_chunks<Source, Data>(data: &mut Source, cpus: u64) -> Vec<[u64; 2]>
 where
-    T: Combiner,
+    Source: Combiner<Data>,
 {
     let size = data.size();
     let chunk = size / cpus;
@@ -58,6 +57,6 @@ where
     chunks
 }
 
-pub fn process_line<T>(proccessor: &dyn FnMut(&[u8]) -> bool) {
-    println!("Processing line");
+pub fn process_line<Source, Data>(proccessor: &dyn FnMut(&[Data]) -> bool) {
+    todo!("Need to implement");
 }

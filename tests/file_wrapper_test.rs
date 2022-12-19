@@ -1,5 +1,6 @@
 use anyhow::Result;
-use processor::state::traits::{find_line_start, Combiner};
+use processor::find_line_start;
+use processor::Combiner;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 
@@ -23,14 +24,9 @@ impl FileWrapper {
     }
 }
 
-impl Combiner for FileWrapper {
-    fn get_current_position(&mut self) -> u64 {
-        self.data.stream_position().unwrap()
-    }
-
-    fn set_current_position(&mut self, current_position: u64) {
-        self.data.seek(SeekFrom::Start(current_position)).unwrap();
-        self.current_position = self.get_current_position();
+impl Combiner<u8> for FileWrapper {
+    fn size(&self) -> u64 {
+        self.data.get_ref().metadata().unwrap().len()
     }
 
     fn set_start_marker(&mut self, start: u8) {
@@ -49,18 +45,27 @@ impl Combiner for FileWrapper {
         self.end_marker
     }
 
-    fn read_exact(&mut self, size: i64, buf: &mut [u8]) {
-        if size < 0 {
-            let new_position = self.get_current_position() - size.abs() as u64;
-            self.set_current_position(new_position);
-        }
-        self.data.read_exact(buf).unwrap();
+    fn get_current_position(&mut self) -> u64 {
+        self.data.stream_position().unwrap()
+    }
+
+    fn set_current_position(&mut self, current_position: u64) {
+        self.data.seek(SeekFrom::Start(current_position)).unwrap();
+        self.current_position = self.get_current_position();
     }
 
     fn read_line(&mut self) -> String {
         let mut line = String::new();
         self.data.read_line(&mut line).unwrap();
-        line
+        line.trim_end().to_string()
+    }
+
+    fn read_one(&mut self, forward: bool) -> Option<u8> {
+        if !forward {
+            let new_position = self.get_current_position() - 1;
+            self.set_current_position(new_position);
+        }
+        self.data.by_ref().bytes().next().transpose().unwrap()
     }
 }
 
@@ -73,12 +78,34 @@ mod tests {
         let result = 2 + 2;
         assert_eq!(result, 4);
     }
+
     #[test]
-    fn test_find_line_start_0_0() {
+    fn test_find_line() {
         use super::*;
-        let mut file = FileWrapper::new("tests_data/test.log".to_string()).unwrap();
-        let result = find_line_start(&mut file, 0);
-        assert_eq!(result, 0);
+        struct TestData {
+            pub start: u64,
+            pub found: u64,
+            pub line: String,
+        }
+
+        impl TestData {
+            fn new(start: u64, found: u64, line: String) -> Self {
+                Self { start, found, line }
+            }
+        }
+
+        for test_data in vec![
+            TestData::new(0, 0, "line-1".to_string()),
+            TestData::new(3, 0, "line-1".to_string()),
+            TestData::new(8, 7, "line-2".to_string()),
+            TestData::new(10, 7, "line-2".to_string()),
+        ] {
+            let mut file = FileWrapper::new("tests_data/test.log".to_string()).unwrap();
+            let result = find_line_start(&mut file, test_data.start);
+            assert_eq!(result, test_data.found);
+            let line = file.read_line();
+            assert_eq!(line, test_data.line);
+        }
     }
 
     #[test]
